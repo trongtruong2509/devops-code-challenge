@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:3000"
+    environment:
+      - BACKEND_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - CORS_ORIGIN=http://localhost:4000
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
