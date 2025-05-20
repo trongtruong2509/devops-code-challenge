@@ -36,13 +36,23 @@ pipeline {
                 }
             }
         }
-        stage('Tag & Push Image') {
+        // stage('Tag & Push Image') {
+        //     steps {
+        //         script {
+        //             sh """
+        //             docker tag ${ECR_REPO}:${IMAGE_TAG} ${env.ECR_URI}:${IMAGE_TAG}
+        //             docker push ${env.ECR_URI}:${IMAGE_TAG}
+        //             """
+        //         }
+        //     }
+        // }
+        stage('Deploy') {
             steps {
-                script {
-                    sh """
-                    docker tag ${ECR_REPO}:${IMAGE_TAG} ${env.ECR_URI}:${IMAGE_TAG}
-                    docker push ${env.ECR_URI}:${IMAGE_TAG}
-                    """
+                script{
+                    docker.withRegistry("${env.ECR_URI}", 'ecr:us-east-1:AWS_CREDENTIALS_ID') {
+                    app.push("${env.BUILD_NUMBER}")
+                    app.push("latest")
+                    }
                 }
             }
         }
