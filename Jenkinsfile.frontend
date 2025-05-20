@@ -5,7 +5,28 @@ pipeline {
         // AWS_ACCOUNT_ID, AWS_REGION, AWS_CREDENTIALS_ID are expected to be in the Jenkins execution environment
         ECR_REPO = 'frontend'
         IMAGE_TAG = 'latest' //"${env.BUILD_NUMBER}"
-        ECR_URI = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${ECR_REPO}"
+        // ECR_URI = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${ECR_REPO}"
+    }
+
+    stages {
+        stage('Set Env Variable') {
+            steps {
+                withCredentials([string(credentialsId: 'AWS_ACCOUNT_ID', variable: 'ACCOUNT_ID')]) {
+                    script {
+                        env.AWS_ACCOUNT_ID = ACCOUNT_ID
+                    }
+                }
+
+                withCredentials([string(credentialsId: 'AWS_REGION', variable: 'AWS_REGION')]) {
+                    script {
+                        env.AWS_REGION = AWS_REGION
+                    }
+                }
+
+                echo "AWS Account ID is: ${env.AWS_ACCOUNT_ID}"
+                echo "AWS Region is: ${env.AWS_REGION}"
+            }
+        }
     }
 
     stages {
@@ -49,7 +70,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 script{
-                    docker.withRegistry("${env.ECR_URI}", 'ecr:us-east-1:AWS_CREDENTIALS_ID') {
+                    docker.withRegistry("${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${ECR_REPO}", 'ecr:us-east-1:AWS_CREDENTIALS_ID') {
                     app.push("${env.BUILD_NUMBER}")
                     app.push("latest")
                     }
