@@ -23,19 +23,19 @@ pipeline {
                 }
             }
         }
-        stage('Login to ECR') {
-            steps {
-                // Ensure AWS_CREDENTIALS_ID in the environment refers to a Jenkins AWS Credentials type ID
-                withAWS(credentials: env.AWS_CREDENTIALS_ID, region: env.AWS_REGION) {
-                    script {
-                        sh """
-                        aws ecr get-login-password --region ${env.AWS_REGION} | \\
-                        docker login --username AWS --password-stdin ${env.ECR_URI}
-                        """
-                    }
-                }
-            }
-        }
+        // stage('Login to ECR') {
+        //     steps {
+        //         // Ensure AWS_CREDENTIALS_ID in the environment refers to a Jenkins AWS Credentials type ID
+        //         withAWS(credentials: env.AWS_CREDENTIALS_ID, region: env.AWS_REGION) {
+        //             script {
+        //                 sh """
+        //                 aws ecr get-login-password --region ${env.AWS_REGION} | \\
+        //                 docker login --username AWS --password-stdin ${env.ECR_URI}
+        //                 """
+        //             }
+        //         }
+        //     }
+        // }
         // stage('Tag & Push Image') {
         //     steps {
         //         script {
