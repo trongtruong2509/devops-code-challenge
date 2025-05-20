@@ -27,9 +27,7 @@ pipeline {
                 echo "AWS Region is: ${env.AWS_REGION}"
             }
         }
-    }
 
-    stages {
         stage('Checkout') {
             steps {
                 checkout scm
