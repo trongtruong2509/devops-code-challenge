@@ -1,34 +1,48 @@
 # Feather DevOps Challenge Solution
 
 ## Overview
-This repository contains a React frontend and an Express backend application deployed on AWS infrastructure using Terraform, Docker, and Jenkins CI/CD pipelines. The solution includes containerized applications running on AWS ECS Fargate with automatic deployment pipelines.
-
-## Infrastructure Components
-
-The deployment includes the following components:
-
-- **AWS VPC** with public and private subnets
-- **ECS Fargate Cluster** for running containerized applications
-- **ECR Repositories** for storing Docker images
-- **Application Load Balancer** for routing traffic to the frontend
-- **Service Discovery** for backend service communication
-- **Jenkins Server** on EC2 for continuous integration and deployment
+This repository contains a React frontend and an Express backend application deployed on AWS using containerization and CI/CD pipelines. The solution demonstrates how to deploy a simple web application using Docker containers and Jenkins for continuous integration and deployment.
 
 ## Deployed Application URLs
 
 - **Frontend Application**: [http://feather-alb-12345.us-east-1.elb.amazonaws.com](http://feather-alb-12345.us-east-1.elb.amazonaws.com)
-- **Jenkins Server**: [http://ec2-12-34-56-78.compute-1.amazonaws.com:8080](http://ec2-12-34-56-78.compute-1.amazonaws.com:8080)
+- **Backend Application**: Backend runs in a private subnet and is accessible only via the frontend
 
 ## Prerequisites
 
-To deploy this infrastructure, you'll need:
+To deploy this project, you'll need:
 
 1. **AWS Account** with administrative access
-2. **AWS CLI** [v2.x+](https://aws.amazon.com/cli/) configured with credentials
-3. **Terraform** [v1.0.0+](https://www.terraform.io/downloads)
+2. **Docker** and **Docker Compose** for local development and building container images
+3. **Jenkins** instance with AWS credentials configured
 4. **Git** for repository management
-5. **SSH Key Pair** for accessing the Jenkins server
-6. **Docker** and **Docker Compose** for local development
+
+## Project Structure
+
+```
+devops-code-challenge/
+├── docker-compose.yaml        # Local development setup
+├── README.md                  # Project documentation
+├── backend/                   # Express backend application
+│   ├── config.js              # Backend configuration
+│   ├── Dockerfile             # Backend container definition
+│   ├── index.js               # Main application file
+│   └── package.json           # Node dependencies
+├── frontend/                  # React frontend application
+│   ├── docker-entrypoint.sh   # Container startup script
+│   ├── Dockerfile             # Frontend container definition
+│   ├── package.json           # Node dependencies
+│   ├── proxy-server.js        # Development proxy server
+│   ├── public/                # Static assets
+│   └── src/                   # Application source code
+└── jenkins/                   # Jenkins pipeline definitions
+    ├── build-and-push/        # Build container images pipelines
+    │   ├── Jenkinsfile.backend
+    │   └── Jenkinsfile.frontend
+    └── update-services/       # Deploy services pipelines
+        ├── Jenkinsfile.backend
+        └── Jenkinsfile.frontend
+```
 
 ## Local Development Environment
 
@@ -73,64 +87,7 @@ docker compose down
 
 The frontend will be available at `http://localhost:4000` and the backend at `http://localhost:8080`.
 
-## AWS Infrastructure Deployment
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/feather-devops-challenge.git
-cd feather-devops-challenge
-```
-
-### 2. Prepare Terraform Variables
-
-Navigate to the infrastructure directory and create a `terraform.tfvars` file:
-
-```bash
-cd infrastructure
-cp terraform.tfvars.example terraform.tfvars
-```
-
-Edit the `terraform.tfvars` file to set appropriate values:
-
-```hcl
-# Required variables
-aws_region        = "us-east-1"
-environment       = "production"
-ecs_cluster_name  = "feather-cluster"
-vpc_cidr          = "10.10.0.0/16"
-public_key        = "/path/to/your/id_ed25519.pub"
-
-# Optional variables
-instance_type     = "t3.medium" # Jenkins instance size
-frontend_cpu      = 1024        # 1 vCPU
-frontend_memory   = 2048        # 2 GB
-backend_cpu       = 1024        # 1 vCPU
-backend_memory    = 2048        # 2 GB
-```
-
-### 3. Deploy Infrastructure
-
-Initialize, plan, and apply the Terraform configuration:
-
-```bash
-terraform init
-terraform plan
-terraform apply --auto-approve
-```
-
-The deployment will create:
-- VPC with public and private subnets
-- ECS Fargate cluster
-- ECR repositories for Docker images
-- Application Load Balancer
-- Jenkins server on EC2
-
-### 4. Access Jenkins and Configure CI/CD
-
-After deployment, you can access the Jenkins server at the URL provided in the Terraform outputs.
-
-## Setting Up Jenkins Pipelines
+## Jenkins CI/CD Pipelines
 
 The repository includes four Jenkins pipeline definitions for building and deploying the application:
 
@@ -142,13 +99,13 @@ The repository includes four Jenkins pipeline definitions for building and deplo
    - `/jenkins/update-services/Jenkinsfile.frontend`: Updates frontend ECS service
    - `/jenkins/update-services/Jenkinsfile.backend`: Updates backend ECS service
 
-### Creating Pipeline Jobs in Jenkins
+### Setting Up Pipeline Jobs in Jenkins
 
 1. **Configure Jenkins Credentials**:
    - Navigate to **Jenkins Dashboard** → **Manage Jenkins** → **Credentials** → **System** → **Global credentials** → **Add Credentials**
    - Create a credentials entry with:
      - **Kind**: Secret file
-     - **File**: Upload the `jenkins_params.env` file from `infrastructure/jenkins-files/jenkins_params.env`
+     - **File**: Upload a file containing the required environment variables
      - **ID**: `PROJECT_ENV`
      - **Description**: Environment variables for project pipelines
 
@@ -193,27 +150,15 @@ The frontend has a configuration file at `frontend/src/config.js` that defines t
 The backend has a configuration file at `backend/config.js` that defines the host that the frontend will be calling from. This URL is used in the `Access-Control-Allow-Origin` CORS header, read in `backend/index.js#14`
 
 In the AWS deployment:
-- The frontend is configured to communicate with the backend service using ECS service discovery
+- The frontend is configured to communicate with the backend service using service discovery
 - Environment variables are injected into container definitions to handle proper communication
-
-## Destroying the Infrastructure
-
-When you no longer need the infrastructure:
-
-```bash
-cd infrastructure
-terraform destroy --auto-approve
-```
-
-⚠️ **Warning**: This will permanently delete all resources created by Terraform, including data in ECR repositories.
 
 ## Implementation Details
 
 This solution implements several DevOps best practices:
 
-1. **Infrastructure as Code**: All AWS resources are defined in Terraform
-2. **Containerization**: Applications are containerized with Docker
-3. **CI/CD Pipelines**: Automated build and deployment with Jenkins
-4. **Service Discovery**: For internal service communication
-5. **Load Balancing**: For high availability and traffic distribution
-6. **Security**: Private subnets for backend services, public only for frontend
+1. **Containerization**: Applications are containerized with Docker
+2. **CI/CD Pipelines**: Automated build and deployment with Jenkins
+3. **Service Discovery**: For internal service communication
+4. **Load Balancing**: For high availability and traffic distribution
+5. **Security**: Private subnets for backend services, public only for frontend
