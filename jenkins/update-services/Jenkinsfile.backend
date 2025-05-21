@@ -21,10 +21,10 @@ pipeline {
     stages {
         stage('Configure AWS CLI') {
             steps {
-                sh '''
+                sh """
                     aws configure set region ${params.AWS_REGION}
                     aws configure set output json
-                '''
+                """
             }
         }
         
