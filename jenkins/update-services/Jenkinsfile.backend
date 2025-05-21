@@ -9,14 +9,13 @@ pipeline {
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
         string(name: 'ECS_CLUSTER', defaultValue: 'feather-cluster', description: 'ECS Cluster name')
         string(name: 'SERVICE_NAME', defaultValue: 'feather-cluster-backend-service', description: 'ECS Service name')
-        string(name: 'TASK_DEFINITION_NAME', defaultValue: 'feather-cluster-backend', description: 'Existing ECS Task Definition name (if empty, uses TASK_FAMILY)')
+        string(name: 'TASK_DEFINITION_NAME', defaultValue: 'feather-cluster-backend', description: 'Existing ECS Task Definition name')
         string(name: 'FRONTEND_ALB_DNS_NAME', description: 'DNS name of the frontend ALB for CORS configuration')
         string(name: 'DESIRED_COUNT', defaultValue: '3', description: 'Desired task count')
     }
     
     environment {
-        ECR_REPO_NAME = "backend"
-        // TASK_FAMILY = "backend"
+        ECR_REPO_NAME = "backend" // TODO: Get from environment or parameters
     }
     
     stages {
@@ -33,7 +32,7 @@ pipeline {
             steps {
                 script {
                     // Use task definition name from parameters or environment variable
-                    def taskDefName = params.TASK_DEFINITION_NAME ?: env.TASK_DEFINITION_NAME ?: TASK_FAMILY
+                    def taskDefName = params.TASK_DEFINITION_NAME // ?: env.TASK_DEFINITION_NAME ?: TASK_FAMILY
                     echo "Using task definition: ${taskDefName}"
                     
                     // Check if task definition exists - fail if it doesn't

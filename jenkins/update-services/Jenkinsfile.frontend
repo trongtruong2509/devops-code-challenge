@@ -1,3 +1,4 @@
+// filepath: /d/repos/mithilesh/feather/devops-code-challenge/jenkins/update-services/Jenkinsfile.frontend
 #!/usr/bin/env groovy
 
 pipeline {
@@ -5,18 +6,17 @@ pipeline {
     
     parameters {
         string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region for deployment')
-        string(name: 'AWS_ACCOUNT_ID', description: 'AWS Account ID')
+        string(name: 'AWS_ACCOUNT_ID', defaultValue: '116981769322', description: 'AWS Account ID')
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
-        string(name: 'ECS_CLUSTER', defaultValue: 'main', description: 'ECS Cluster name')
-        string(name: 'SERVICE_NAME', defaultValue: 'main-frontend-service', description: 'ECS Service name')
-        string(name: 'TASK_DEFINITION_NAME', defaultValue: '', description: 'Existing ECS Task Definition name (if empty, uses TASK_FAMILY)')
-        string(name: 'BACKEND_URL', defaultValue: 'http://main-backend.main.internal:8080', description: 'Backend URL for frontend service')
+        string(name: 'ECS_CLUSTER', defaultValue: 'feather-cluster', description: 'ECS Cluster name')
+        string(name: 'SERVICE_NAME', defaultValue: 'feather-cluster-frontend-service', description: 'ECS Service name')
+        string(name: 'TASK_DEFINITION_NAME', defaultValue: 'feather-cluster-frontend', description: 'Existing ECS Task Definition name')
+        string(name: 'BACKEND_URL', defaultValue: 'http://feather-cluster-backend.feather-cluster.internal:8080', description: 'Backend URL for frontend service')
         string(name: 'DESIRED_COUNT', defaultValue: '3', description: 'Desired task count')
     }
     
     environment {
-        ECR_REPO_NAME = "frontend"
-        TASK_FAMILY = "frontend"
+        ECR_REPO_NAME = "frontend" // TODO: Get from environment or parameters
     }
     
     stages {
@@ -33,7 +33,7 @@ pipeline {
             steps {
                 script {
                     // Use task definition name from parameters or environment variable
-                    def taskDefName = params.TASK_DEFINITION_NAME ?: env.TASK_DEFINITION_NAME ?: TASK_FAMILY
+                    def taskDefName = params.TASK_DEFINITION_NAME
                     echo "Using task definition: ${taskDefName}"
                     
                     // Check if task definition exists - fail if it doesn't
@@ -76,30 +76,6 @@ pipeline {
                     echo "New task definition revision: ${taskRevision}"
                     env.TASK_REVISION = taskRevision
                     env.TASK_FAMILY = taskDefName
-                }
-                            export NEW_IMAGE="${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}"
-                            
-                            # Update environment variables if needed
-                            export NEW_DEF=\$(echo "\$TASK_DEF_JSON" | jq '.taskDefinition | {containerDefinitions: .containerDefinitions, family: .family, cpu: .cpu, memory: .memory, networkMode: .networkMode, requiresCompatibilities: .requiresCompatibilities, executionRoleArn: .executionRoleArn, taskRoleArn: .taskRoleArn}')
-                            
-                            # Update the image and BACKEND_URL in the container definition
-                            export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].image = "'\$NEW_IMAGE'"')
-                            export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].environment = [{"name":"BACKEND_URL","value":"${params.BACKEND_URL}"}] + [.containerDefinitions[0].environment[] | select(.name != "BACKEND_URL")]')
-                            
-                            echo "Registering new task definition..."
-                            echo "\$NEW_DEF" > updated-frontend-task-def.json
-                            aws ecs register-task-definition --cli-input-json file://updated-frontend-task-def.json
-                        """
-                    }
-                    
-                    // Extract revision number
-                    def taskRevision = sh(
-                        script: "aws ecs describe-task-definition --task-definition ${taskDefName} --query 'taskDefinition.revision' --output text",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "New task definition revision: ${taskRevision}"
-                    env.TASK_REVISION = taskRevision
                 }
             }
         }
