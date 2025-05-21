@@ -7,7 +7,7 @@ pipeline {
     environment {
         ECR_REPO_NAME = "backend"
         // Load parameters from credentials binding
-        BACKEND_PARAMS = credentials('BACKEND_PARAMS')
+        PROJECT_ENV = credentials('PROJECT_ENV')
     }
     
     parameters {
@@ -20,10 +20,10 @@ pipeline {
         stage('Load Parameters') {
             steps {
                 script {
-                    echo "Loading parameters from BACKEND_PARAMS credentials file"
+                    echo "Loading parameters from PROJECT_ENV credentials file"
                     
                     // Parse the credentials file
-                    def paramsContent = readFile file: env.BACKEND_PARAMS
+                    def paramsContent = readFile file: env.PROJECT_ENV
                     def paramsMap = [:]
                     
                     paramsContent.split('\n').each { line ->
@@ -39,10 +39,10 @@ pipeline {
                     env.AWS_REGION = paramsMap.AWS_REGION ?: 'us-east-1'
                     env.AWS_ACCOUNT_ID = paramsMap.AWS_ACCOUNT_ID ?: '116981769322'
                     env.ECS_CLUSTER = paramsMap.ECS_CLUSTER ?: 'feather-cluster'
-                    env.SERVICE_NAME = paramsMap.SERVICE_NAME ?: 'feather-cluster-backend-service'
-                    env.TASK_DEFINITION_NAME = paramsMap.TASK_DEFINITION_NAME ?: 'feather-cluster-backend'
+                    env.SERVICE_NAME = paramsMap.BACKEND_SERVICE_NAME ?: 'feather-cluster-backend-service'
+                    env.TASK_DEFINITION_NAME = paramsMap.BACKEND_TASK_DEFINITION ?: 'feather-cluster-backend'
                     env.FRONTEND_ALB_DNS_NAME = paramsMap.FRONTEND_ALB_DNS_NAME ?: ''
-                    env.DESIRED_COUNT = paramsMap.DESIRED_COUNT ?: '3'
+                    env.DESIRED_COUNT = paramsMap.BACKEND_DESIRED_COUNT ?: '3'
                     
                     echo "Loaded parameters from credentials file"
                     echo "AWS_REGION: ${env.AWS_REGION}"

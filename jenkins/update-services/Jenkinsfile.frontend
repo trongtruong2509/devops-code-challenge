@@ -5,7 +5,7 @@ pipeline {
     environment {
         ECR_REPO_NAME = "frontend"
         // Load parameters from credentials binding
-        FRONTEND_PARAMS = credentials('FRONTEND_PARAMS')
+        PROJECT_ENV = credentials('PROJECT_ENV')
     }
     
     parameters {
@@ -18,10 +18,10 @@ pipeline {
         stage('Load Parameters') {
             steps {
                 script {
-                    echo "Loading parameters from FRONTEND_PARAMS credentials file"
+                    echo "Loading parameters from PROJECT_ENV credentials file"
                     
                     // Parse the credentials file
-                    def paramsContent = readFile file: env.FRONTEND_PARAMS
+                    def paramsContent = readFile file: env.PROJECT_ENV
                     def paramsMap = [:]
                     
                     paramsContent.split('\n').each { line ->
@@ -37,10 +37,10 @@ pipeline {
                     env.AWS_REGION = paramsMap.AWS_REGION ?: 'us-east-1'
                     env.AWS_ACCOUNT_ID = paramsMap.AWS_ACCOUNT_ID ?: '116981769322'
                     env.ECS_CLUSTER = paramsMap.ECS_CLUSTER ?: 'feather-cluster'
-                    env.SERVICE_NAME = paramsMap.SERVICE_NAME ?: 'feather-cluster-frontend-service'
-                    env.TASK_DEFINITION_NAME = paramsMap.TASK_DEFINITION_NAME ?: 'feather-cluster-frontend'
+                    env.SERVICE_NAME = paramsMap.FRONTEND_SERVICE_NAME ?: 'feather-cluster-frontend-service'
+                    env.TASK_DEFINITION_NAME = paramsMap.FRONTEND_TASK_DEFINITION ?: 'feather-cluster-frontend'
                     env.BACKEND_URL = paramsMap.BACKEND_URL ?: 'http://feather-cluster-backend.feather-cluster.internal:8080'
-                    env.DESIRED_COUNT = paramsMap.DESIRED_COUNT ?: '3'
+                    env.DESIRED_COUNT = paramsMap.FRONTEND_DESIRED_COUNT ?: '3'
                     
                     echo "Loaded parameters from credentials file"
                     echo "AWS_REGION: ${env.AWS_REGION}"
