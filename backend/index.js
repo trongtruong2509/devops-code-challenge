@@ -23,8 +23,17 @@ app.get('/health', (req, res) => {
 });
 
 app.get(/.*/, (req, res) => {
-    console.log(`${new Date().toISOString()} GET`)
-    res.json({ id: ID })
+    const timestamp = new Date().toISOString();
+    console.log(`${timestamp} GET`)
+    res.json({
+        id: ID,
+        message: "Backend connection successful!",
+        timestamp: timestamp,
+        serverInfo: {
+            port: PORT,
+            environment: process.env.NODE_ENV || 'development'
+        }
+    })
 })
 
 app.listen(PORT, () => {
