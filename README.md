@@ -111,6 +111,11 @@ The repository includes four Jenkins pipeline definitions for building and deplo
    - Repeat the process for deployment pipelines using script paths:
      - `jenkins/update-services/Jenkinsfile.frontend`
      - `jenkins/update-services/Jenkinsfile.backend`
+   - To automate deployment after successful builds:
+     - In each deployment job, go to **Configure** → **Build Triggers**
+     - Select **Build after other projects are built**
+     - Enter the corresponding build job name (e.g., `build-frontend` for the frontend deployment)
+     - Select **Trigger only if build is stable** to ensure only successful builds trigger deployment
 
 4. **Configure Webhooks** (Optional):
    - For automated builds, configure webhooks in your Git repository to trigger Jenkins jobs on commits/PRs
@@ -124,7 +129,7 @@ The complete CI/CD workflow consists of:
    - Builds a Docker image
    - Tags it with build number
    - Pushes it to ECR repository
-3. Deployment pipeline is triggered, which:
+3. Deployment pipeline is automatically triggered upon successful build completion, which:
    - Updates ECS task definition with new image
    - Updates ECS service to use new task definition
    - Monitors deployment for success
