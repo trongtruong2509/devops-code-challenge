@@ -1,70 +1,56 @@
 pipeline {
     agent any
     
-    // Load parameters from Terraform-generated environment file
+    // Load parameters from credentials file
     environment {
-        PARAMS_FILE = '/var/lib/jenkins/environment/jenkins_frontend_params.env'
         ECR_REPO_NAME = "frontend"
+        // Load parameters from credentials binding
+        FRONTEND_PARAMS = credentials('FRONTEND_PARAMS')
     }
     
     parameters {
-        string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region for deployment')
-        string(name: 'AWS_ACCOUNT_ID', defaultValue: '116981769322', description: 'AWS Account ID')
+        // Only keep IMAGE_TAG as a parameter input
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
-        string(name: 'ECS_CLUSTER', defaultValue: 'feather-cluster', description: 'ECS Cluster name')
-        string(name: 'SERVICE_NAME', defaultValue: 'feather-cluster-frontend-service', description: 'ECS Service name')
-        string(name: 'TASK_DEFINITION_NAME', defaultValue: 'feather-cluster-frontend', description: 'Existing ECS Task Definition name')
-        string(name: 'BACKEND_URL', defaultValue: 'http://feather-cluster-backend.feather-cluster.internal:8080', description: 'Backend URL for frontend service')
-        string(name: 'DESIRED_COUNT', defaultValue: '3', description: 'Desired task count')
     }
     
     stages {
-        // New stage to load parameters from Terraform
+        // Stage to load parameters from credentials file
         stage('Load Parameters') {
             steps {
                 script {
-                    // Load the helper function
-                    if (fileExists('/var/lib/jenkins/load_params.groovy')) {
-                        load '/var/lib/jenkins/load_params.groovy'
+                    echo "Loading parameters from FRONTEND_PARAMS credentials file"
+                    
+                    // Parse the credentials file
+                    def paramsContent = readFile file: env.FRONTEND_PARAMS
+                    def paramsMap = [:]
+                    
+                    paramsContent.split('\n').each { line ->
+                        def keyValue = line.split('=', 2)
+                        if (keyValue.length == 2) {
+                            def key = keyValue[0].trim()
+                            def value = keyValue[1].trim()
+                            paramsMap[key] = value
+                        }
                     }
                     
-                    // Load parameters from file if it exists
-                    if (fileExists(env.PARAMS_FILE)) {
-                        echo "Loading parameters from ${env.PARAMS_FILE}"
-                        def paramsMap = readProperties file: env.PARAMS_FILE
-                        
-                        // Override parameters with values from file
-                        if (paramsMap.AWS_REGION) {
-                            params.AWS_REGION = paramsMap.AWS_REGION
-                            echo "Set AWS_REGION to ${params.AWS_REGION}"
-                        }
-                        if (paramsMap.AWS_ACCOUNT_ID) {
-                            params.AWS_ACCOUNT_ID = paramsMap.AWS_ACCOUNT_ID
-                            echo "Set AWS_ACCOUNT_ID to ${params.AWS_ACCOUNT_ID}"
-                        }
-                        if (paramsMap.ECS_CLUSTER) {
-                            params.ECS_CLUSTER = paramsMap.ECS_CLUSTER
-                            echo "Set ECS_CLUSTER to ${params.ECS_CLUSTER}"
-                        }
-                        if (paramsMap.SERVICE_NAME) {
-                            params.SERVICE_NAME = paramsMap.SERVICE_NAME
-                            echo "Set SERVICE_NAME to ${params.SERVICE_NAME}"
-                        }
-                        if (paramsMap.TASK_DEFINITION_NAME) {
-                            params.TASK_DEFINITION_NAME = paramsMap.TASK_DEFINITION_NAME
-                            echo "Set TASK_DEFINITION_NAME to ${params.TASK_DEFINITION_NAME}"
-                        }
-                        if (paramsMap.BACKEND_URL) {
-                            params.BACKEND_URL = paramsMap.BACKEND_URL
-                            echo "Set BACKEND_URL to ${params.BACKEND_URL}"
-                        }
-                        if (paramsMap.DESIRED_COUNT) {
-                            params.DESIRED_COUNT = paramsMap.DESIRED_COUNT
-                            echo "Set DESIRED_COUNT to ${params.DESIRED_COUNT}"
-                        }
-                    } else {
-                        echo "Parameters file not found: ${env.PARAMS_FILE}. Using default values."
-                    }
+                    // Set required parameters from credentials file
+                    env.AWS_REGION = paramsMap.AWS_REGION ?: 'us-east-1'
+                    env.AWS_ACCOUNT_ID = paramsMap.AWS_ACCOUNT_ID ?: '116981769322'
+                    env.ECS_CLUSTER = paramsMap.ECS_CLUSTER ?: 'feather-cluster'
+                    env.SERVICE_NAME = paramsMap.SERVICE_NAME ?: 'feather-cluster-frontend-service'
+                    env.TASK_DEFINITION_NAME = paramsMap.TASK_DEFINITION_NAME ?: 'feather-cluster-frontend'
+                    env.BACKEND_URL = paramsMap.BACKEND_URL ?: 'http://feather-cluster-backend.feather-cluster.internal:8080'
+                    env.DESIRED_COUNT = paramsMap.DESIRED_COUNT ?: '3'
+                    
+                    echo "Loaded parameters from credentials file"
+                    echo "AWS_REGION: ${env.AWS_REGION}"
+                    echo "AWS_ACCOUNT_ID: ${env.AWS_ACCOUNT_ID}"
+                    echo "ECS_CLUSTER: ${env.ECS_CLUSTER}"
+                    echo "SERVICE_NAME: ${env.SERVICE_NAME}"
+                    echo "TASK_DEFINITION_NAME: ${env.TASK_DEFINITION_NAME}"
+                    echo "BACKEND_URL: ${env.BACKEND_URL}"
+                    echo "DESIRED_COUNT: ${env.DESIRED_COUNT}"
+                    echo "Using IMAGE_TAG: ${params.IMAGE_TAG}"
                 }
             }
         }
@@ -72,7 +58,7 @@ pipeline {
         stage('Configure AWS CLI') {
             steps {
                 sh """
-                    aws configure set region ${params.AWS_REGION}
+                    aws configure set region ${env.AWS_REGION}
                     aws configure set output json
                 """
             }
@@ -81,8 +67,8 @@ pipeline {
         stage('Update ECS Task Definition') {
             steps {
                 script {
-                    // Use task definition name from parameters or environment variable
-                    def taskDefName = params.TASK_DEFINITION_NAME
+                    // Use task definition name from environment variables
+                    def taskDefName = env.TASK_DEFINITION_NAME
                     echo "Using task definition: ${taskDefName}"
                     
                     // Check if task definition exists - fail if it doesn't
@@ -102,14 +88,14 @@ pipeline {
                         export TASK_DEF_JSON=\$(aws ecs describe-task-definition --task-definition ${taskDefName})
                         
                         # Update image but keep all other settings
-                        export NEW_IMAGE="${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}"
+                        export NEW_IMAGE="${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}"
                         
                         # Extract existing task definition structure
                         export NEW_DEF=\$(echo "\$TASK_DEF_JSON" | jq '.taskDefinition | {containerDefinitions: .containerDefinitions, family: .family, cpu: .cpu, memory: .memory, networkMode: .networkMode, requiresCompatibilities: .requiresCompatibilities, executionRoleArn: .executionRoleArn, taskRoleArn: .taskRoleArn}')
                         
                         # Update the image and BACKEND_URL in the container definition
                         export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].image = "'\$NEW_IMAGE'"')
-                        export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].environment = [{"name":"BACKEND_URL","value":"${params.BACKEND_URL}"}] + [.containerDefinitions[0].environment[] | select(.name != "BACKEND_URL")]')
+                        export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].environment = [{"name":"BACKEND_URL","value":"${env.BACKEND_URL}"}] + [.containerDefinitions[0].environment[] | select(.name != "BACKEND_URL")]')
                         
                         echo "Registering new task definition revision..."
                         echo "\$NEW_DEF" > updated-frontend-task-def.json
@@ -134,7 +120,7 @@ pipeline {
                 script {
                     // Check if service exists
                     def serviceExists = sh(
-                        script: "aws ecs describe-services --cluster ${params.ECS_CLUSTER} --services ${params.SERVICE_NAME} --query 'services[0].status' || echo 'MISSING'",
+                        script: "aws ecs describe-services --cluster ${env.ECS_CLUSTER} --services ${env.SERVICE_NAME} --query 'services[0].status' || echo 'MISSING'",
                         returnStdout: true
                     ).trim()
                     
@@ -159,21 +145,21 @@ pipeline {
                         
                         // Get target group ARN
                         def targetGroupArn = sh(
-                            script: "aws elbv2 describe-target-groups --names ${params.ECS_CLUSTER}-frontend-tg --query 'TargetGroups[0].TargetGroupArn' --output text",
+                            script: "aws elbv2 describe-target-groups --names ${env.ECS_CLUSTER}-frontend-tg --query 'TargetGroups[0].TargetGroupArn' --output text",
                             returnStdout: true
                         ).trim()
                         
                         if (targetGroupArn == "") {
-                            error "Target group ${params.ECS_CLUSTER}-frontend-tg not found. Make sure Terraform has been applied."
+                            error "Target group ${env.ECS_CLUSTER}-frontend-tg not found. Make sure Terraform has been applied."
                         }
                         
                         // Create the ECS service
                         sh """
                             aws ecs create-service \
-                              --cluster ${params.ECS_CLUSTER} \
-                              --service-name ${params.SERVICE_NAME} \
+                              --cluster ${env.ECS_CLUSTER} \
+                              --service-name ${env.SERVICE_NAME} \
                               --task-definition ${env.TASK_FAMILY}:${env.TASK_REVISION} \
-                              --desired-count ${params.DESIRED_COUNT} \
+                              --desired-count ${env.DESIRED_COUNT} \
                               --launch-type FARGATE \
                               --network-configuration "awsvpcConfiguration={subnets=[${publicSubnets}],securityGroups=[${frontendSgId}],assignPublicIp=ENABLED}" \
                               --load-balancers "targetGroupArn=${targetGroupArn},containerName=frontend,containerPort=3000"
@@ -182,10 +168,10 @@ pipeline {
                         echo "Service exists. Updating service..."
                         sh """
                             aws ecs update-service \
-                              --cluster ${params.ECS_CLUSTER} \
-                              --service ${params.SERVICE_NAME} \
+                              --cluster ${env.ECS_CLUSTER} \
+                              --service ${env.SERVICE_NAME} \
                               --task-definition ${env.TASK_FAMILY}:${env.TASK_REVISION} \
-                              --desired-count ${params.DESIRED_COUNT} \
+                              --desired-count ${env.DESIRED_COUNT} \
                               --force-new-deployment
                         """
                     }
@@ -206,8 +192,8 @@ pipeline {
                         def deploymentStatus = sh(
                             script: """
                                 aws ecs describe-services \
-                                  --cluster ${params.ECS_CLUSTER} \
-                                  --services ${params.SERVICE_NAME} \
+                                  --cluster ${env.ECS_CLUSTER} \
+                                  --services ${env.SERVICE_NAME} \
                                   --query 'services[0].deployments[0].status' \
                                   --output text
                             """,
@@ -220,8 +206,8 @@ pipeline {
                             def runningCount = sh(
                                 script: """
                                     aws ecs describe-services \
-                                      --cluster ${params.ECS_CLUSTER} \
-                                      --services ${params.SERVICE_NAME} \
+                                      --cluster ${env.ECS_CLUSTER} \
+                                      --services ${env.SERVICE_NAME} \
                                       --query 'services[0].deployments[0].runningCount' \
                                       --output text
                                 """,
@@ -231,8 +217,8 @@ pipeline {
                             def desiredCount = sh(
                                 script: """
                                     aws ecs describe-services \
-                                      --cluster ${params.ECS_CLUSTER} \
-                                      --services ${params.SERVICE_NAME} \
+                                      --cluster ${env.ECS_CLUSTER} \
+                                      --services ${env.SERVICE_NAME} \
                                       --query 'services[0].deployments[0].desiredCount' \
                                       --output text
                                 """,
