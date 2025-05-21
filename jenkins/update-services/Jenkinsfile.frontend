@@ -9,6 +9,7 @@ pipeline {
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
         string(name: 'ECS_CLUSTER', defaultValue: 'main', description: 'ECS Cluster name')
         string(name: 'SERVICE_NAME', defaultValue: 'main-frontend-service', description: 'ECS Service name')
+        string(name: 'TASK_DEFINITION_NAME', defaultValue: '', description: 'Existing ECS Task Definition name (if empty, uses TASK_FAMILY)')
         string(name: 'BACKEND_URL', defaultValue: 'http://main-backend.main.internal:8080', description: 'Backend URL for frontend service')
         string(name: 'DESIRED_COUNT', defaultValue: '3', description: 'Desired task count')
     }
@@ -28,64 +29,72 @@ pipeline {
             }
         }
         
-        stage('Create task definition') {
+        stage('Update ECS Task Definition') {
             steps {
                 script {
-                    // Create task definition JSON with proper interpolation
-                    def taskDefJson = """{
-                      "family": "${TASK_FAMILY}",
-                      "networkMode": "awsvpc",
-                      "requiresCompatibilities": ["FARGATE"],
-                      "cpu": "512",
-                      "memory": "1024",
-                      "executionRoleArn": "arn:aws:iam::${params.AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
-                      "taskRoleArn": "arn:aws:iam::${params.AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
-                      "containerDefinitions": [
-                        {
-                          "name": "frontend",
-                          "image": "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}",
-                          "cpu": 512,
-                          "memory": 1024,
-                          "essential": true,
-                          "environment": [
-                            {
-                              "name": "BACKEND_URL",
-                              "value": "${params.BACKEND_URL}"
-                            }
-                          ],
-                          "portMappings": [
-                            {
-                              "containerPort": 3000,
-                              "hostPort": 3000,
-                              "protocol": "tcp"
-                            }
-                          ],
-                          "logConfiguration": {
-                            "logDriver": "awslogs",
-                            "options": {
-                              "awslogs-group": "/aws/ecs/${params.ECS_CLUSTER}",
-                              "awslogs-region": "${params.AWS_REGION}",
-                              "awslogs-stream-prefix": "frontend"
-                            }
-                          }
-                        }
-                      ]
-                    }"""
+                    // Use task definition name from parameters or environment variable
+                    def taskDefName = params.TASK_DEFINITION_NAME ?: env.TASK_DEFINITION_NAME ?: TASK_FAMILY
+                    echo "Using task definition: ${taskDefName}"
                     
-                    // Write task definition to file
-                    writeFile file: 'frontend-task-definition.json', text: taskDefJson
-                    
-                    // Register task definition
-                    def registerTaskDef = sh(
-                        script: "aws ecs register-task-definition --cli-input-json file://frontend-task-definition.json",
+                    // Check if task definition exists - fail if it doesn't
+                    def taskDefExists = sh(
+                        script: "aws ecs describe-task-definition --task-definition ${taskDefName} --query 'taskDefinition' || echo ''",
                         returnStdout: true
                     ).trim()
                     
-                    echo "Task definition registered: ${registerTaskDef}"
+                    if (taskDefExists == "") {
+                        error "Task definition '${taskDefName}' does not exist. Pipeline requires an existing task definition."
+                    }
+                    
+                    // Task definition exists, update only the image
+                    echo "Task definition exists. Updating with new image..."
+                    sh """
+                        # Get current task definition
+                        export TASK_DEF_JSON=\$(aws ecs describe-task-definition --task-definition ${taskDefName})
+                        
+                        # Update image but keep all other settings
+                        export NEW_IMAGE="${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}"
+                        
+                        # Extract existing task definition structure
+                        export NEW_DEF=\$(echo "\$TASK_DEF_JSON" | jq '.taskDefinition | {containerDefinitions: .containerDefinitions, family: .family, cpu: .cpu, memory: .memory, networkMode: .networkMode, requiresCompatibilities: .requiresCompatibilities, executionRoleArn: .executionRoleArn, taskRoleArn: .taskRoleArn}')
+                        
+                        # Update the image and BACKEND_URL in the container definition
+                        export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].image = "'\$NEW_IMAGE'"')
+                        export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].environment = [{"name":"BACKEND_URL","value":"${params.BACKEND_URL}"}] + [.containerDefinitions[0].environment[] | select(.name != "BACKEND_URL")]')
+                        
+                        echo "Registering new task definition revision..."
+                        echo "\$NEW_DEF" > updated-frontend-task-def.json
+                        aws ecs register-task-definition --cli-input-json file://updated-frontend-task-def.json
+                    """
                     
                     // Extract revision number
                     def taskRevision = sh(
-                        script: "aws ecs describe-task-definition --task-definition ${TASK_FAMILY} --query 'taskDefinition.revision' --output text",
+                        script: "aws ecs describe-task-definition --task-definition ${taskDefName} --query 'taskDefinition.revision' --output text",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "New task definition revision: ${taskRevision}"
+                    env.TASK_REVISION = taskRevision
+                    env.TASK_FAMILY = taskDefName
+                }
+                            export NEW_IMAGE="${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}"
+                            
+                            # Update environment variables if needed
+                            export NEW_DEF=\$(echo "\$TASK_DEF_JSON" | jq '.taskDefinition | {containerDefinitions: .containerDefinitions, family: .family, cpu: .cpu, memory: .memory, networkMode: .networkMode, requiresCompatibilities: .requiresCompatibilities, executionRoleArn: .executionRoleArn, taskRoleArn: .taskRoleArn}')
+                            
+                            # Update the image and BACKEND_URL in the container definition
+                            export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].image = "'\$NEW_IMAGE'"')
+                            export NEW_DEF=\$(echo "\$NEW_DEF" | jq '.containerDefinitions[0].environment = [{"name":"BACKEND_URL","value":"${params.BACKEND_URL}"}] + [.containerDefinitions[0].environment[] | select(.name != "BACKEND_URL")]')
+                            
+                            echo "Registering new task definition..."
+                            echo "\$NEW_DEF" > updated-frontend-task-def.json
+                            aws ecs register-task-definition --cli-input-json file://updated-frontend-task-def.json
+                        """
+                    }
+                    
+                    // Extract revision number
+                    def taskRevision = sh(
+                        script: "aws ecs describe-task-definition --task-definition ${taskDefName} --query 'taskDefinition.revision' --output text",
                         returnStdout: true
                     ).trim()
                     
@@ -138,7 +147,7 @@ pipeline {
                             aws ecs create-service \
                               --cluster ${params.ECS_CLUSTER} \
                               --service-name ${params.SERVICE_NAME} \
-                              --task-definition ${TASK_FAMILY}:${env.TASK_REVISION} \
+                              --task-definition ${env.TASK_FAMILY}:${env.TASK_REVISION} \
                               --desired-count ${params.DESIRED_COUNT} \
                               --launch-type FARGATE \
                               --network-configuration "awsvpcConfiguration={subnets=[${publicSubnets}],securityGroups=[${frontendSgId}],assignPublicIp=ENABLED}" \
@@ -150,7 +159,7 @@ pipeline {
                             aws ecs update-service \
                               --cluster ${params.ECS_CLUSTER} \
                               --service ${params.SERVICE_NAME} \
-                              --task-definition ${TASK_FAMILY}:${env.TASK_REVISION} \
+                              --task-definition ${env.TASK_FAMILY}:${env.TASK_REVISION} \
                               --desired-count ${params.DESIRED_COUNT} \
                               --force-new-deployment
                         """
