@@ -3,20 +3,6 @@
 ## Overview
 This repository contains a React frontend and an Express backend application deployed on AWS using containerization and CI/CD pipelines. The solution demonstrates how to deploy a simple web application using Docker containers and Jenkins for continuous integration and deployment.
 
-## Deployed Application URLs
-
-- **Frontend Application**: [http://feather-alb-12345.us-east-1.elb.amazonaws.com](http://feather-alb-12345.us-east-1.elb.amazonaws.com)
-- **Backend Application**: Backend runs in a private subnet and is accessible only via the frontend
-
-## Prerequisites
-
-To deploy this project, you'll need:
-
-1. **AWS Account** with administrative access
-2. **Docker** and **Docker Compose** for local development and building container images
-3. **Jenkins** instance with AWS credentials configured
-4. **Git** for repository management
-
 ## Project Structure
 
 ```
@@ -152,13 +138,3 @@ The backend has a configuration file at `backend/config.js` that defines the hos
 In the AWS deployment:
 - The frontend is configured to communicate with the backend service using service discovery
 - Environment variables are injected into container definitions to handle proper communication
-
-## Implementation Details
-
-This solution implements several DevOps best practices:
-
-1. **Containerization**: Applications are containerized with Docker
-2. **CI/CD Pipelines**: Automated build and deployment with Jenkins
-3. **Service Discovery**: For internal service communication
-4. **Load Balancing**: For high availability and traffic distribution
-5. **Security**: Private subnets for backend services, public only for frontend
