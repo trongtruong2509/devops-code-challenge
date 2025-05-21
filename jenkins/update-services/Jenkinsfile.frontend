@@ -1,0 +1,237 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+    
+    parameters {
+        string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region for deployment')
+        string(name: 'AWS_ACCOUNT_ID', description: 'AWS Account ID')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag to deploy')
+        string(name: 'ECS_CLUSTER', defaultValue: 'feather', description: 'ECS Cluster name')
+        string(name: 'SERVICE_NAME', defaultValue: 'feather-frontend-service', description: 'ECS Service name')
+        string(name: 'BACKEND_URL', defaultValue: 'http://feather-backend.feather.internal:8080', description: 'Backend URL for frontend service')
+        string(name: 'DESIRED_COUNT', defaultValue: '1', description: 'Desired task count')
+    }
+    
+    environment {
+        ECR_REPO_NAME = "feather-frontend"
+        TASK_FAMILY = "feather-frontend"
+    }
+    
+    stages {
+        stage('Configure AWS CLI') {
+            steps {
+                sh '''
+                    aws configure set region ${params.AWS_REGION}
+                    aws configure set output json
+                '''
+            }
+        }
+        
+        stage('Create task definition') {
+            steps {
+                script {
+                    // Create task definition JSON with proper interpolation
+                    def taskDefJson = """{
+                      "family": "${TASK_FAMILY}",
+                      "networkMode": "awsvpc",
+                      "requiresCompatibilities": ["FARGATE"],
+                      "cpu": "512",
+                      "memory": "1024",
+                      "executionRoleArn": "arn:aws:iam::${params.AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+                      "taskRoleArn": "arn:aws:iam::${params.AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+                      "containerDefinitions": [
+                        {
+                          "name": "frontend",
+                          "image": "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${params.IMAGE_TAG}",
+                          "cpu": 512,
+                          "memory": 1024,
+                          "essential": true,
+                          "environment": [
+                            {
+                              "name": "BACKEND_URL",
+                              "value": "${params.BACKEND_URL}"
+                            }
+                          ],
+                          "portMappings": [
+                            {
+                              "containerPort": 3000,
+                              "hostPort": 3000,
+                              "protocol": "tcp"
+                            }
+                          ],
+                          "logConfiguration": {
+                            "logDriver": "awslogs",
+                            "options": {
+                              "awslogs-group": "/aws/ecs/${params.ECS_CLUSTER}",
+                              "awslogs-region": "${params.AWS_REGION}",
+                              "awslogs-stream-prefix": "frontend"
+                            }
+                          }
+                        }
+                      ]
+                    }"""
+                    
+                    // Write task definition to file
+                    writeFile file: 'frontend-task-definition.json', text: taskDefJson
+                    
+                    // Register task definition
+                    def registerTaskDef = sh(
+                        script: "aws ecs register-task-definition --cli-input-json file://frontend-task-definition.json",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Task definition registered: ${registerTaskDef}"
+                    
+                    // Extract revision number
+                    def taskRevision = sh(
+                        script: "aws ecs describe-task-definition --task-definition ${TASK_FAMILY} --query 'taskDefinition.revision' --output text",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "New task definition revision: ${taskRevision}"
+                    env.TASK_REVISION = taskRevision
+                }
+            }
+        }
+        
+        stage('Update Service') {
+            steps {
+                script {
+                    // Check if service exists
+                    def serviceExists = sh(
+                        script: "aws ecs describe-services --cluster ${params.ECS_CLUSTER} --services ${params.SERVICE_NAME} --query 'services[0].status' || echo 'MISSING'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (serviceExists == "MISSING" || serviceExists == "") {
+                        echo "Service does not exist. Creating new service..."
+                        
+                        // Get the public subnets
+                        def publicSubnets = sh(
+                            script: "aws ec2 describe-subnets --filters 'Name=tag:Name,Values=*public*' --query 'Subnets[].SubnetId' --output text | tr '\\t' ','",
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Get the security group ID for frontend
+                        def frontendSgId = sh(
+                            script: "aws ec2 describe-security-groups --filters 'Name=tag:Name,Values=*frontend*' --query 'SecurityGroups[0].GroupId' --output text",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (frontendSgId == "") {
+                            error "Security group for frontend not found. Make sure Terraform has been applied."
+                        }
+                        
+                        // Get target group ARN
+                        def targetGroupArn = sh(
+                            script: "aws elbv2 describe-target-groups --names ${params.ECS_CLUSTER}-frontend-tg --query 'TargetGroups[0].TargetGroupArn' --output text",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (targetGroupArn == "") {
+                            error "Target group ${params.ECS_CLUSTER}-frontend-tg not found. Make sure Terraform has been applied."
+                        }
+                        
+                        // Create the ECS service
+                        sh """
+                            aws ecs create-service \
+                              --cluster ${params.ECS_CLUSTER} \
+                              --service-name ${params.SERVICE_NAME} \
+                              --task-definition ${TASK_FAMILY}:${env.TASK_REVISION} \
+                              --desired-count ${params.DESIRED_COUNT} \
+                              --launch-type FARGATE \
+                              --network-configuration "awsvpcConfiguration={subnets=[${publicSubnets}],securityGroups=[${frontendSgId}],assignPublicIp=ENABLED}" \
+                              --load-balancers "targetGroupArn=${targetGroupArn},containerName=frontend,containerPort=3000"
+                        """
+                    } else {
+                        echo "Service exists. Updating service..."
+                        sh """
+                            aws ecs update-service \
+                              --cluster ${params.ECS_CLUSTER} \
+                              --service ${params.SERVICE_NAME} \
+                              --task-definition ${TASK_FAMILY}:${env.TASK_REVISION} \
+                              --desired-count ${params.DESIRED_COUNT} \
+                              --force-new-deployment
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Monitor Deployment') {
+            steps {
+                script {
+                    def deploymentSuccess = false
+                    def attempts = 0
+                    def maxAttempts = 30
+                    
+                    while (!deploymentSuccess && attempts < maxAttempts) {
+                        attempts++
+                        
+                        def deploymentStatus = sh(
+                            script: """
+                                aws ecs describe-services \
+                                  --cluster ${params.ECS_CLUSTER} \
+                                  --services ${params.SERVICE_NAME} \
+                                  --query 'services[0].deployments[0].status' \
+                                  --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Deployment status: ${deploymentStatus}, attempt: ${attempts}/${maxAttempts}"
+                        
+                        if (deploymentStatus == "PRIMARY") {
+                            def runningCount = sh(
+                                script: """
+                                    aws ecs describe-services \
+                                      --cluster ${params.ECS_CLUSTER} \
+                                      --services ${params.SERVICE_NAME} \
+                                      --query 'services[0].deployments[0].runningCount' \
+                                      --output text
+                                """,
+                                returnStdout: true
+                            ).trim().toInteger()
+                            
+                            def desiredCount = sh(
+                                script: """
+                                    aws ecs describe-services \
+                                      --cluster ${params.ECS_CLUSTER} \
+                                      --services ${params.SERVICE_NAME} \
+                                      --query 'services[0].deployments[0].desiredCount' \
+                                      --output text
+                                """,
+                                returnStdout: true
+                            ).trim().toInteger()
+                            
+                            echo "Running count: ${runningCount}, desired count: ${desiredCount}"
+                            
+                            if (runningCount == desiredCount) {
+                                deploymentSuccess = true
+                                echo "Deployment completed successfully!"
+                            }
+                        }
+                        
+                        if (!deploymentSuccess) {
+                            sleep 10 // Wait 10 seconds before checking again
+                        }
+                    }
+                    
+                    if (!deploymentSuccess) {
+                        error "Deployment did not complete successfully within the allowed time."
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "Frontend service deployed successfully!"
+        }
+        failure {
+            echo "Frontend service deployment failed!"
+        }
+    }
+}
