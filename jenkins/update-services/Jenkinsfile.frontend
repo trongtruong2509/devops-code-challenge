@@ -3,7 +3,6 @@ pipeline {
     
     // Load parameters from credentials file
     environment {
-        ECR_REPO_NAME = "frontend"
         // Load parameters from credentials binding
         PROJECT_ENV = credentials('PROJECT_ENV')
     }
@@ -41,7 +40,8 @@ pipeline {
                     env.TASK_DEFINITION_NAME = paramsMap.FRONTEND_TASK_DEFINITION ?: 'feather-cluster-frontend'
                     env.BACKEND_URL = paramsMap.BACKEND_URL ?: 'http://feather-cluster-backend.feather-cluster.internal:8080'
                     env.DESIRED_COUNT = paramsMap.FRONTEND_DESIRED_COUNT ?: '3'
-                    
+                    env.ECR_REPO_NAME = paramsMap.FRONTEND_ECR_REPO ?: 'frontend'
+
                     echo "Loaded parameters from credentials file"
                     echo "AWS_REGION: ${env.AWS_REGION}"
                     echo "AWS_ACCOUNT_ID: ${env.AWS_ACCOUNT_ID}"

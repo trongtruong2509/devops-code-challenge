@@ -3,9 +3,7 @@
 pipeline {
     agent any
     
-    // Load parameters from credentials file
     environment {
-        ECR_REPO_NAME = "backend"
         // Load parameters from credentials binding
         PROJECT_ENV = credentials('PROJECT_ENV')
     }
@@ -43,6 +41,7 @@ pipeline {
                     env.TASK_DEFINITION_NAME = paramsMap.BACKEND_TASK_DEFINITION ?: 'feather-cluster-backend'
                     env.FRONTEND_ALB_DNS_NAME = paramsMap.FRONTEND_ALB_DNS_NAME ?: ''
                     env.DESIRED_COUNT = paramsMap.BACKEND_DESIRED_COUNT ?: '3'
+                    env.ECR_REPO_NAME = paramsMap.BACKEND_ECR_REPO ?: 'backend'
                     
                     echo "Loaded parameters from credentials file"
                     echo "AWS_REGION: ${env.AWS_REGION}"
