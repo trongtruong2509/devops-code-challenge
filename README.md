@@ -1,20 +1,35 @@
-# Overview
-This repository contains a React frontend, and an Express backend that the frontend connects to.
+# Feather DevOps Challenge Solution
 
-# Objective
-Deploy the frontend and backend to somewhere publicly accessible over the internet. The AWS Free Tier should be more than sufficient to run this project, but you may use any platform and tooling you'd like for your solution.
+## Overview
+This repository contains a React frontend and an Express backend application deployed on AWS infrastructure using Terraform, Docker, and Jenkins CI/CD pipelines. The solution includes containerized applications running on AWS ECS Fargate with automatic deployment pipelines.
 
-Fork this repo as a base. You may change any code in this repository to suit the infrastructure you build in this code challenge.
+## Infrastructure Components
 
-# Submission
-1. A github repo that has been forked from this repo with all your code.
-2. Modify this README file with instructions for:
-* Any tools needed to deploy your infrastructure
-* All the steps needed to repeat your deployment process
-* URLs to the your deployed frontend.
+The deployment includes the following components:
 
-# Evaluation
-You will be evaluated on the ease to replicate your infrastructure. This is a combination of quality of the instructions, as well as any scripts to automate the overall setup process.
+- **AWS VPC** with public and private subnets
+- **ECS Fargate Cluster** for running containerized applications
+- **ECR Repositories** for storing Docker images
+- **Application Load Balancer** for routing traffic to the frontend
+- **Service Discovery** for backend service communication
+- **Jenkins Server** on EC2 for continuous integration and deployment
+
+## Deployed Application URLs
+
+- **Frontend Application**: [http://feather-alb-12345.us-east-1.elb.amazonaws.com](http://feather-alb-12345.us-east-1.elb.amazonaws.com)
+- **Jenkins Server**: [http://ec2-12-34-56-78.compute-1.amazonaws.com:8080](http://ec2-12-34-56-78.compute-1.amazonaws.com:8080)
+
+## Prerequisites
+
+To deploy this infrastructure, you'll need:
+
+1. **AWS Account** with administrative access
+2. **AWS CLI** [v2.x+](https://aws.amazon.com/cli/) configured with credentials
+3. **Terraform** [v1.0.0+](https://www.terraform.io/downloads)
+4. **Git** for repository management
+5. **SSH Key Pair** for accessing the Jenkins server
+
+## Deployment Steps
 
 # Setup your environment
 Install nodejs. Binaries and installers can be found on nodejs.org.
@@ -24,6 +39,8 @@ For macOS or Linux, Nodejs can usually be found in your preferred package manage
 https://nodejs.org/en/download/package-manager/
 
 Depending on the Linux distribution, the Node Package Manager `npm` may need to be installed separately.
+
+## Local Development Environment
 
 # Running the project
 The backend and the frontend will need to run on separate processes. The backend should be started first.
