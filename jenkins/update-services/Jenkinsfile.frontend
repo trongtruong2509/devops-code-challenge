@@ -1,6 +1,3 @@
-// filepath: /d/repos/mithilesh/feather/devops-code-challenge/jenkins/update-services/Jenkinsfile.frontend
-#!/usr/bin/env groovy
-
 pipeline {
     agent any
     
