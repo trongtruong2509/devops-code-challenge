@@ -7,9 +7,10 @@ echo "BACKEND_URL=$BACKEND_URL"
 
 RUNTIME_BACKEND_URL=${BACKEND_URL:-http://localhost:8080/}
 
-# Create a runtime config with the correct backend URL
-echo "window.API_URL = '${RUNTIME_BACKEND_URL}';" > /app/build/config.js
-echo "Runtime configuration created with BACKEND_URL=$RUNTIME_BACKEND_URL"
+# Create a runtime config with the frontend-relative API path
+echo "window.API_URL = '/api/';" > /app/build/config.js
+echo "Runtime configuration created using API proxy path: /api/"
+echo "Actual backend URL that will be used by proxy: $RUNTIME_BACKEND_URL"
 
-# Start the server
-exec npx serve -s build -l 3000
+# Start the server with our proxy that will handle API requests
+exec node proxy-server.js

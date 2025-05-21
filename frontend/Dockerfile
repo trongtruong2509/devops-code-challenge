@@ -23,13 +23,14 @@ RUN addgroup -S appgroup && \
 WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/build ./build
+COPY proxy-server.js ./
 
 # Create entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh && sed -i 's/\r$//' /docker-entrypoint.sh
 
-# Install serve for static hosting and set permissions
-RUN npm install -g serve && \
+# Install dependencies for API proxy server and set permissions
+RUN npm install express@4.17.1 http-proxy-middleware@2.0.6 && \
     npm cache clean --force && \
     chown -R appuser:appgroup /app
 
