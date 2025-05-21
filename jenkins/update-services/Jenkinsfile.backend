@@ -16,7 +16,7 @@ pipeline {
     
     environment {
         ECR_REPO_NAME = "backend"
-        TASK_FAMILY = "backend"
+        // TASK_FAMILY = "backend"
     }
     
     stages {
